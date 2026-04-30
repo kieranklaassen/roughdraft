@@ -745,24 +745,89 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
           const tr = view.state.tr;
 
           if (from !== to) {
-            const oldChange = createCriticChange(
-              "substitution-old",
-              undefined,
-              {
-                existingChanges: getDocumentCriticChanges(currentEditor),
-              },
-            );
-            const newMark = view.state.schema.marks.criticChange.create({
-              ...oldChange,
-              kind: "substitution-new",
+            const criticMarkType = view.state.schema.marks.criticChange;
+            const isAdditionKind = (m: ProseMirrorMark) =>
+              m.type === criticMarkType &&
+              (m.attrs.kind === "addition" ||
+                m.attrs.kind === "substitution-new");
+
+            type Segment = {
+              from: number;
+              to: number;
+              isAddition: boolean;
+            };
+            const segments: Segment[] = [];
+            view.state.doc.nodesBetween(from, to, (node, pos) => {
+              if (!node.isText) return;
+              const segFrom = Math.max(pos, from);
+              const segTo = Math.min(pos + node.nodeSize, to);
+              if (segFrom >= segTo) return;
+              const isAdd = node.marks.some(isAdditionKind);
+              const prev = segments[segments.length - 1];
+              if (prev && prev.isAddition === isAdd && prev.to === segFrom) {
+                prev.to = segTo;
+              } else {
+                segments.push({
+                  from: segFrom,
+                  to: segTo,
+                  isAddition: isAdd,
+                });
+              }
             });
-            tr.addMark(
-              from,
-              to,
-              view.state.schema.marks.criticChange.create(oldChange),
-            );
-            tr.insert(to, view.state.schema.text(text, [newMark]));
-            tr.setSelection(TextSelection.create(tr.doc, to + text.length));
+
+            const hasOriginalText = segments.some((s) => !s.isAddition);
+
+            if (hasOriginalText) {
+              const oldChange = createCriticChange(
+                "substitution-old",
+                undefined,
+                {
+                  existingChanges: getDocumentCriticChanges(currentEditor),
+                },
+              );
+              const newMark = view.state.schema.marks.criticChange.create({
+                ...oldChange,
+                kind: "substitution-new",
+              });
+
+              for (const seg of [...segments].reverse()) {
+                if (seg.isAddition) {
+                  tr.delete(seg.from, seg.to);
+                } else {
+                  tr.addMark(
+                    seg.from,
+                    seg.to,
+                    view.state.schema.marks.criticChange.create(oldChange),
+                  );
+                }
+              }
+
+              const insertPos = tr.mapping.map(to, -1);
+              tr.insert(insertPos, view.state.schema.text(text, [newMark]));
+              tr.setSelection(
+                TextSelection.create(tr.doc, insertPos + text.length),
+              );
+            } else {
+              for (const seg of [...segments].reverse()) {
+                tr.delete(seg.from, seg.to);
+              }
+              const insertPos = tr.mapping.map(from, -1);
+              const existingMark = getReusableSuggestionInputMark(
+                currentEditor,
+                insertPos,
+              );
+              const mark =
+                existingMark ??
+                view.state.schema.marks.criticChange.create(
+                  createCriticChange("addition", undefined, {
+                    existingChanges: getDocumentCriticChanges(currentEditor),
+                  }),
+                );
+              tr.insert(insertPos, view.state.schema.text(text, [mark]));
+              tr.setSelection(
+                TextSelection.create(tr.doc, insertPos + text.length),
+              );
+            }
           } else {
             const existingMark = getReusableSuggestionInputMark(
               currentEditor,
@@ -792,24 +857,89 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
           const tr = view.state.tr;
 
           if (from !== to) {
-            const oldChange = createCriticChange(
-              "substitution-old",
-              undefined,
-              {
-                existingChanges: getDocumentCriticChanges(currentEditor),
-              },
-            );
-            const newMark = view.state.schema.marks.criticChange.create({
-              ...oldChange,
-              kind: "substitution-new",
+            const criticMarkType = view.state.schema.marks.criticChange;
+            const isAdditionKind = (m: ProseMirrorMark) =>
+              m.type === criticMarkType &&
+              (m.attrs.kind === "addition" ||
+                m.attrs.kind === "substitution-new");
+
+            type Segment = {
+              from: number;
+              to: number;
+              isAddition: boolean;
+            };
+            const segments: Segment[] = [];
+            view.state.doc.nodesBetween(from, to, (node, pos) => {
+              if (!node.isText) return;
+              const segFrom = Math.max(pos, from);
+              const segTo = Math.min(pos + node.nodeSize, to);
+              if (segFrom >= segTo) return;
+              const isAdd = node.marks.some(isAdditionKind);
+              const prev = segments[segments.length - 1];
+              if (prev && prev.isAddition === isAdd && prev.to === segFrom) {
+                prev.to = segTo;
+              } else {
+                segments.push({
+                  from: segFrom,
+                  to: segTo,
+                  isAddition: isAdd,
+                });
+              }
             });
-            tr.addMark(
-              from,
-              to,
-              view.state.schema.marks.criticChange.create(oldChange),
-            );
-            tr.insert(to, view.state.schema.text(text, [newMark]));
-            tr.setSelection(TextSelection.create(tr.doc, to + text.length));
+
+            const hasOriginalText = segments.some((s) => !s.isAddition);
+
+            if (hasOriginalText) {
+              const oldChange = createCriticChange(
+                "substitution-old",
+                undefined,
+                {
+                  existingChanges: getDocumentCriticChanges(currentEditor),
+                },
+              );
+              const newMark = view.state.schema.marks.criticChange.create({
+                ...oldChange,
+                kind: "substitution-new",
+              });
+
+              for (const seg of [...segments].reverse()) {
+                if (seg.isAddition) {
+                  tr.delete(seg.from, seg.to);
+                } else {
+                  tr.addMark(
+                    seg.from,
+                    seg.to,
+                    view.state.schema.marks.criticChange.create(oldChange),
+                  );
+                }
+              }
+
+              const insertPos = tr.mapping.map(to, -1);
+              tr.insert(insertPos, view.state.schema.text(text, [newMark]));
+              tr.setSelection(
+                TextSelection.create(tr.doc, insertPos + text.length),
+              );
+            } else {
+              for (const seg of [...segments].reverse()) {
+                tr.delete(seg.from, seg.to);
+              }
+              const insertPos = tr.mapping.map(from, -1);
+              const existingMark = getReusableSuggestionInputMark(
+                currentEditor,
+                insertPos,
+              );
+              const mark =
+                existingMark ??
+                view.state.schema.marks.criticChange.create(
+                  createCriticChange("addition", undefined, {
+                    existingChanges: getDocumentCriticChanges(currentEditor),
+                  }),
+                );
+              tr.insert(insertPos, view.state.schema.text(text, [mark]));
+              tr.setSelection(
+                TextSelection.create(tr.doc, insertPos + text.length),
+              );
+            }
           } else {
             const existingMark = getReusableSuggestionInputMark(
               currentEditor,
@@ -855,18 +985,56 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
             const selectedText = view.state.doc.textBetween(from, to);
             void navigator.clipboard.writeText(selectedText);
 
-            const change = createCriticChange("deletion", undefined, {
-              existingChanges: getDocumentCriticChanges(currentEditor),
+            const criticMarkType = view.state.schema.marks.criticChange;
+            const isAdditionKind = (m: ProseMirrorMark) =>
+              m.type === criticMarkType &&
+              (m.attrs.kind === "addition" ||
+                m.attrs.kind === "substitution-new");
+
+            type Segment = {
+              from: number;
+              to: number;
+              isAddition: boolean;
+            };
+            const segments: Segment[] = [];
+            view.state.doc.nodesBetween(from, to, (node, pos) => {
+              if (!node.isText) return;
+              const segFrom = Math.max(pos, from);
+              const segTo = Math.min(pos + node.nodeSize, to);
+              if (segFrom >= segTo) return;
+              const isAdd = node.marks.some(isAdditionKind);
+              const prev = segments[segments.length - 1];
+              if (prev && prev.isAddition === isAdd && prev.to === segFrom) {
+                prev.to = segTo;
+              } else {
+                segments.push({
+                  from: segFrom,
+                  to: segTo,
+                  isAddition: isAdd,
+                });
+              }
             });
-            view.dispatch(
-              view.state.tr
-                .addMark(
-                  from,
-                  to,
-                  view.state.schema.marks.criticChange.create(change),
-                )
-                .scrollIntoView(),
-            );
+
+            const tr = view.state.tr;
+            for (const seg of [...segments].reverse()) {
+              if (seg.isAddition) {
+                tr.delete(seg.from, seg.to);
+              } else {
+                const deletionMark =
+                  getReusableSuggestionDeletionMark(
+                    currentEditor,
+                    seg.from,
+                    seg.to,
+                  ) ??
+                  view.state.schema.marks.criticChange.create(
+                    createCriticChange("deletion", undefined, {
+                      existingChanges: getDocumentCriticChanges(currentEditor),
+                    }),
+                  );
+                tr.addMark(seg.from, seg.to, deletionMark);
+              }
+            }
+            view.dispatch(tr.scrollIntoView());
             return true;
           }
 
@@ -880,31 +1048,35 @@ const RichTextEditorSurface = memo(function RichTextEditorSurface({
           let to = selection.to;
 
           if (selection.empty) {
+            const $pos = view.state.doc.resolve(selection.from);
+            const blockStart = $pos.start($pos.depth);
+            const blockEnd = $pos.end($pos.depth);
+
             if (event.key === "Backspace") {
               if (event.ctrlKey || event.altKey) {
                 const textBefore = view.state.doc.textBetween(
-                  1,
+                  blockStart,
                   selection.from,
                 );
                 const match = textBefore.match(/\S+\s*$/);
                 from = match
                   ? selection.from - match[0].length
-                  : Math.max(1, selection.from - 1);
+                  : Math.max(blockStart, selection.from - 1);
               } else {
-                from = Math.max(1, selection.from - 1);
+                from = Math.max(blockStart, selection.from - 1);
               }
             } else {
               if (event.ctrlKey || event.altKey) {
                 const textAfter = view.state.doc.textBetween(
                   selection.to,
-                  view.state.doc.content.size,
+                  blockEnd,
                 );
                 const match = textAfter.match(/^\s*\S+/);
                 to = match
                   ? selection.to + match[0].length
-                  : Math.min(view.state.doc.content.size, selection.to + 1);
+                  : Math.min(blockEnd, selection.to + 1);
               } else {
-                to = Math.min(view.state.doc.content.size, selection.to + 1);
+                to = Math.min(blockEnd, selection.to + 1);
               }
             }
           }
